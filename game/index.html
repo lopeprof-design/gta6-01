@@ -1,19 +1,145 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Sunset Shores — Port Solano</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1426;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #fff; }
+  #game { display: block; width: 100%; height: 100%; }
+  .panel { background: rgba(16, 14, 32, 0.72); border: 1px solid rgba(255, 158, 87, 0.35);
+    border-radius: 10px; backdrop-filter: blur(3px); }
+  /* Top-left: health + cash */
+  #hud-left { position: fixed; top: 14px; left: 14px; padding: 10px 14px; z-index: 5; min-width: 230px; }
+  #health-bar { width: 200px; height: 12px; background: rgba(255,255,255,0.18); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #35d05a, #9be15d); transition: width 0.2s; }
+  #health-text { font-size: 12px; opacity: 0.85; margin-top: 3px; display: inline-block; }
+  #money { font-size: 24px; font-weight: 700; color: #7dff9e; margin-top: 4px; letter-spacing: 0.5px; }
+  #ammo { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+  /* Top-right: wanted + clock */
+  #hud-right { position: fixed; top: 14px; right: 14px; padding: 10px 14px; z-index: 5; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 4px; color: rgba(255,255,255,0.35); }
+  #stars.hot { color: #ffd23e; text-shadow: 0 0 12px rgba(255, 210, 62, 0.8); }
+  #clock { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  #speed { font-size: 13px; opacity: 0.85; }
+  /* Bottom-left: missions */
+  #hud-missions { position: fixed; left: 14px; bottom: 14px; padding: 12px 14px; z-index: 5; max-width: 340px; }
+  #objective { font-size: 15px; font-weight: 600; color: #ffd23e; margin-bottom: 6px; }
+  #mission-list .mi { font-size: 13px; opacity: 0.75; padding: 1px 0; }
+  #mission-list .mi.active { opacity: 1; color: #fff; }
+  #mission-list .mi.done { opacity: 0.55; text-decoration: line-through; }
+  /* Bottom-right: minimap */
+  #minimap-wrap { position: fixed; right: 14px; bottom: 14px; z-index: 5; padding: 6px; }
+  #minimap { display: block; border-radius: 6px; }
+  /* Crosshair + toast */
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    z-index: 5; display: none; pointer-events: none; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.8); }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+  #toast { position: fixed; left: 50%; top: 74px; transform: translateX(-50%); z-index: 6;
+    padding: 9px 18px; font-size: 15px; font-weight: 600; opacity: 0; transition: opacity 0.25s;
+    pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+  .hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4;
+    font-size: 12px; opacity: 0.6; pointer-events: none; white-space: nowrap; }
+  /* Full-screen overlays */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: none; align-items: center;
+    justify-content: center; flex-direction: column; text-align: center;
+    background: linear-gradient(180deg, rgba(26,20,38,0.55), rgba(46,26,60,0.82)); }
+  .overlay.show { display: flex; }
+  .overlay h1 { font-size: 64px; letter-spacing: 6px; color: #ffd23e;
+    text-shadow: 0 4px 0 #c65d7b, 0 8px 32px rgba(0,0,0,0.6); }
+  .overlay h2 { font-size: 22px; font-weight: 400; color: #ffb36b; margin-top: 4px; letter-spacing: 2px; }
+  .overlay p { max-width: 560px; margin: 18px 0 6px; font-size: 16px; line-height: 1.55; opacity: 0.92; }
+  .overlay .controls { margin: 16px 0 8px; font-size: 14px; line-height: 1.9; opacity: 0.85;
+    background: rgba(0,0,0,0.3); padding: 12px 22px; border-radius: 10px; }
+  .overlay .controls b { color: #ffd23e; }
+  button { cursor: pointer; font-size: 17px; font-weight: 700; color: #1a1426;
+    background: linear-gradient(180deg, #ffd23e, #ff9e57); border: none; border-radius: 8px;
+    padding: 13px 34px; margin: 8px 6px 0; box-shadow: 0 4px 16px rgba(0,0,0,0.45); }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.4); box-shadow: none; }
+  #busted-screen h1 { color: #ff5147; text-shadow: 0 4px 0 #7a1010, 0 8px 32px rgba(0,0,0,0.6); }
+  #complete-screen h1 { color: #7dff9e; }
+  .tiny { font-size: 12px; opacity: 0.55; margin-top: 14px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="game"></canvas>
+
+<div id="hud-left" class="panel">
+  <div id="health-bar"><div id="health-fill"></div></div>
+  <span id="health-text">100</span>
+  <div id="money">$120</div>
+  <div id="ammo">▸ 30 peluru</div>
+</div>
+
+<div id="hud-right" class="panel">
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="clock">17:24</div>
+  <div id="speed">jalan kaki</div>
+</div>
+
+<div id="hud-missions" class="panel">
+  <div id="objective">Antar paket ke Dermaga Solano</div>
+  <div id="mission-list"></div>
+</div>
+
+<div id="minimap-wrap" class="panel"><canvas id="minimap" width="168" height="168"></canvas></div>
+<div id="crosshair"></div>
+<div id="toast" class="panel"></div>
+<div class="hint">WASD gerak &middot; Mouse putar kamera &middot; E curi/keluar mobil &middot; Klik tembak &middot; F pukul &middot; C kamera &middot; P jeda</div>
+
+<div id="start-screen" class="overlay">
+  <h1>SUNSET SHORES</h1>
+  <h2>PORT SOLANO &middot; KOTA DI UJUNG MATAHARI</h2>
+  <p>Mara Voss, kurir lepas. Satu paket, tiga pekerjaan, dan seluruh polisi kota
+     yang mengincarmu. Jelajahi Port Solano dengan berjalan kaki atau di balik
+     kemudi mobil curian — dan jangan sampai ketangkap.</p>
+  <div class="controls">
+    <b>WASD</b> jalan / mengemudi &nbsp;·&nbsp; <b>Mouse</b> putar kamera &nbsp;·&nbsp; <b>E</b> curi &amp; keluar mobil<br>
+    <b>Klik</b> tembak &nbsp;·&nbsp; <b>F</b> pukul &nbsp;·&nbsp; <b>C</b> ganti kamera &nbsp;·&nbsp; <b>Shift</b> lari<br>
+    <b>P / Esc</b> jeda &nbsp;·&nbsp; <b>M</b> suara hidup/mati
+  </div>
+  <div>
+    <button id="btn-start">Mulai</button>
+    <button id="btn-continue" class="ghost">Lanjutkan</button>
+  </div>
+  <div class="tiny">Game orisinal — kota, karakter, dan cerita fiktif. Progres tersimpan otomatis di browser ini.</div>
+</div>
+
+<div id="pause-screen" class="overlay">
+  <h1>JEDA</h1>
+  <h2>PORT SOLANO MENUNGGUMU</h2>
+  <div>
+    <button id="btn-resume">Lanjutkan</button>
+    <button id="btn-restart" class="ghost">Mulai dari Awal</button>
+  </div>
+  <div><button id="btn-mute" class="ghost">Suara: Hidup (M)</button></div>
+</div>
+
+<div id="busted-screen" class="overlay">
+  <h1>BUSTED</h1>
+  <h2 id="busted-reason">Polisi menangkapmu di jalan.</h2>
+  <p>Kamu dibebaskan dari rumah sakit dengan denda $100. Port Solano belum selesai denganmu.</p>
+  <div><button id="btn-busted">Respawn di Rumah Sakit</button></div>
+</div>
+
+<div id="complete-screen" class="overlay">
+  <h1>CERITA SELESAI</h1>
+  <h2>MARA VOSS — LEGENDA PORT SOLANO</h2>
+  <p id="complete-stats"></p>
+  <p>Tiga pekerjaan selesai, polisi ditinggalkan di debu. Kota ini milikmu sekarang.</p>
+  <div><button id="btn-roam">Terus Bermain (Free Roam)</button></div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

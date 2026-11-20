@@ -1,61 +1,132 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
-
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
-export const STEP = 1 / 60;
-
-export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+// Sunset Shores — shared tuning numbers, world layout and small helpers.
+// The whole game reads its sizes, speeds and money values from here so one
+// file is the place to rebalance anything.
+export const CFG = {
+  // World: a square city grid, a sand strip, then the sea to the south (+z).
+  cityHalf: 200,
+  beachStart: 200,
+  waterStart: 238,
+  worldLimit: 262,
+  roadWidth: 10,
+  blockSize: 30,
+  pitch: 40, // road centre to road centre
+  streetCount: 11, // streets at -200, -160, ... 200
+  // Player on foot.
+  walkSpeed: 6,
+  runSpeed: 10,
+  playerRadius: 0.7,
+  playerHealth: 100,
+  // Cars.
+  carAccel: 16,
+  carBrake: 30,
+  carReverse: 9,
+  carMaxSpeed: 34,
+  policeMaxSpeed: 38,
+  trafficSpeed: 9,
+  carRadius: 1.6,
+  // Combat.
+  pistolDamage: 34,
+  pistolAmmo: 30,
+  pistolRange: 90,
+  punchDamage: 25,
+  punchRange: 2.6,
+  // Wanted.
+  wantedDecaySeconds: 8,
+  maxWanted: 5,
+  // Money.
+  startMoney: 120,
+  missionRewards: [150, 250, 500],
+  packageBonus: 50,
+  bustedFine: 100,
+  // Day cycle (sunset game: the clock starts late afternoon).
+  startHour: 17.4,
 };
 
-export const LIVES = 3;
+export const MISSIONS = [
+  {
+    id: 'first-fare',
+    title: 'First Fare',
+    brief: 'Mara, antar paket ini ke ujung Dermaga Solano sebelum matahari tenggelam.',
+    objective: 'Antar paket ke Dermaga Solano',
+    target: { x: 0, z: 246 },
+    radius: 9,
+  },
+  {
+    id: 'the-pickup',
+    title: 'The Pickup',
+    brief: 'Tiga paket menunggu di penjuru kota. Ambil semuanya, jangan sampai ketahuan.',
+    objective: 'Kumpulkan 3 paket di kota',
+    packages: [
+      { x: -76, z: -76 },
+      { x: 84, z: 36 },
+      { x: -36, z: 124 },
+    ],
+    radius: 5,
+  },
+  {
+    id: 'harbor-run',
+    title: 'Harbor Run',
+    brief: 'Polisi sudah mengendusmu. Kabur ke Pelabuhan Barat dan hilang dari radar mereka.',
+    objective: 'Kabur ke Pelabuhan Barat dengan wanted 3',
+    target: { x: -156, z: 222 },
+    radius: 10,
+    wanted: 3,
+  },
+];
 
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
-};
+// Deterministic random numbers: the same seed builds the same city, which
+// keeps the ?shot= screenshots repeatable.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
-};
+export function pick(rng, list) {
+  return list[Math.floor(rng() * list.length)];
+}
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
+export function range(rng, min, max) {
+  return min + rng() * (max - min);
+}
 
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
+export function clamp(value, min, max) {
+  return value < min ? min : value > max ? max : value;
+}
 
-export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
-};
+export function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+// Shortest signed angle difference, for smooth turning.
+export function angleDelta(a, b) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
 
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';
+export function angleLerp(a, b, t) {
+  return a + angleDelta(a, b) * t;
+}
+
+export function dist2d(ax, az, bx, bz) {
+  const dx = ax - bx;
+  const dz = az - bz;
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+export function formatClock(hour) {
+  const h = Math.floor(hour) % 24;
+  const m = Math.floor((hour % 1) * 60);
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+export function formatMoney(n) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
